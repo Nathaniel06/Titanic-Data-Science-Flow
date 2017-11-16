@@ -62,8 +62,7 @@ summary(model1)
 confusionMatrix(Xtrain_test$Survived, model_test1)
 ```
 
-create new features taking into consideration Age, Sibsb, and Parch. the first pass will no engineer any features but rather brute force it.
-first lets look at data agin
+create new features taking into consideration Age, Sibsb, and Parch
 ```{r}
 summary(all)
 ```
