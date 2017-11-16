@@ -1,0 +1,119 @@
+---
+title: "Titanic Analyses iter 1"
+output: html_notebook
+---
+
+My first attempt at data science process
+Identify objectives > Data collection and understanding > Data preparation >  Data Modeling > Evaluate Model > Conclusions and review
+
+Identify Objecticces
+1) Implment Data science flow on Titanic DS set to predict survival
+2) analyze results and review what can be improved / what you did wrong
+
+DATA COLLECTION AND UNDERSTANDING
+Load Data
+
+```{r}
+train <- read.csv("train.csv", stringsAsFactors = F)
+str(train)
+test <- read.csv("test.csv", stringsAsFactors = F)
+str(test)
+```
+
+
+Combine data for easier processing
+
+```{r}
+all <- rbind(train[names(train) != "Survived"], test)
+str(all)
+```
+
+Lets visualize some of the data in particular Pclass, sex, and age factored by survival rate
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+ggplot(train, aes(Pclass)) + geom_bar(position = "dodge", aes(fill = factor(train$Survived)))
+ggplot(train, aes(Sex)) + geom_bar(position = "dodge", aes(fill = factor(train$Survived)))
+ggplot(train, aes(Age)) + geom_histogram(position = "dodge", aes(fill = factor(train$Survived)))
+```
+
+DATA PREPARATION
+
+Lets look for missing values using summary (this only takes care of Numericc Data)
+
+
+```{r}
+summary(all)
+```
+Age has 263 NA's, Fare has 1 NA. This takes care of numeric data.
+
+For chr data lets sum up all "" values ("" seems to be the default string value for missing character values)
+
+```{r}
+Chr_cols <- c("Name", "Sex", "Ticket", "Cabin", "Embarked")
+for(i in Chr_cols){
+        
+        print(paste(i, ": ", sum(all[i] == "")))
+        
+}
+```
+
+Embarked has 2 missing values and Cabin has 1014 missing values
+
+The easiest values to replace are Embarked and Fare. We'll replace Embarked and Fare with the median for each
+
+```{r}
+all$Embarked[all$Embarked == ""] <- "S"
+all$Fare[is.na(all$Fare)] <- 14.454
+summary(all)
+
+```
+
+Now we want to attempt our first machine learning algorithm using the cleaned data.
+I will be using Pclass, Sex, Embarked, and Age for my first attempt
+First I need to make the data numeric / factors
+
+
+```{r}
+factor_col_names <- c("Pclass", "Sex", "Embarked")
+for (i in factor_col_names){
+        new_col_name <- paste("factor_", i)
+        all[,new_col_name] <- factor(all[,i])
+}
+summary(all)
+str(all)
+```
+
+DATA MODELING
+
+Create Xtrain, Ytrain and Xtest in prepartion for glm
+
+```{r}
+train_names <- c("factor_ Pclass", "factor_ Sex")
+Xtrain <- all[1:891, train_names]
+Xtrain$Survived <- factor(train[,"Survived"])
+Xtest <- all[892:1309, train_names]
+
+model <- glm(Survived ~ ., data = Xtrain, family = binomial)
+model_test <-factor(ifelse(predict(model, newdata = Xtrain[train_names]) > 0.5,1,0))
+summary(model)
+confusionMatrix(Xtrain$Survived, model_test)
+
+compare <- data.frame(Model = model_test, Actual = factor(Xtrain$Survived))
+head(compare)
+
+```
+
+CONCLUSIONS AND REVIEW
+
+Even with only a few features we were able to achieve ~ 78% accuracy rate
+
+Clearly we can use more features and there is more data to look at
+
+Furthermore we did not create either a test/validation/test set so our data is most likeley over trained
+
+we did not look at any regularization parameters or try to identify bias/variance
+
+Other ML algorithms should also be considered (SVM, decision trees)

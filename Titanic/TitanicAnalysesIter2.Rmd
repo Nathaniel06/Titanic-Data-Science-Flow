@@ -1,0 +1,124 @@
+---
+title: "Titanic Analyses iter 2"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+Load Data from titanic analyses iter 1
+
+```{r}
+library(caret);
+library(ggplot2);
+
+train <- read.csv("train.csv", stringsAsFactors = F)
+test <- read.csv("test.csv", stringsAsFactors = F)
+all <- rbind(train[names(train) != "Survived"], test)
+
+Chr_cols <- c("Name", "Sex", "Ticket", "Cabin", "Embarked")
+#for(i in Chr_cols){
+        
+#        print(paste(i, ": ", sum(all[i] == "")))
+        
+#}
+
+all$Embarked[all$Embarked == ""] <- "S"
+all$Fare[is.na(all$Fare)] <- 14.454
+
+factor_col_names <- c("Pclass", "Sex", "Embarked")
+for (i in factor_col_names){
+        new_col_name <- paste("factor_", i)
+        all[,new_col_name] <- factor(all[,i])
+}
+
+train_names <- c("factor_ Pclass", "factor_ Sex")
+Xtrain <- all[1:891, train_names]
+Xtrain$Survived <- factor(train[,"Survived"])
+Xtest <- all[892:1309, train_names]
+
+model <- glm(Survived ~ ., data = Xtrain, family = binomial)
+model_test <-factor(ifelse(predict(model, newdata = Xtrain[train_names]) > 0.5,1,0))
+summary(model)
+confusionMatrix(Xtrain$Survived, model_test)
+
+compare <- data.frame(Model = model_test, Actual = factor(Xtrain$Survived))
+```
+
+Split Xtrain into Xtrain_test and Xtrain_train
+
+```{r}
+Xtrain_train <- Xtrain[1:(dim(Xtrain)[1]/2),]
+Xtrain_test <- Xtrain[(dim(Xtrain)[1]/2 +1):(dim(Xtrain)[1]),]
+
+model1 <- glm(Survived ~ ., data = Xtrain_train, family = binomial)
+model_test1 <-factor(ifelse(predict(model1, newdata = Xtrain_test[train_names]) > 0.5,1,0))
+summary(model1)
+confusionMatrix(Xtrain_test$Survived, model_test1)
+```
+
+create new features taking into consideration Age, Sibsb, and Parch. the first pass will no engineer any features but rather brute force it.
+first lets look at data agin
+```{r}
+summary(all)
+```
+
+plot sibsp and parch factored by survived
+```{r}
+library(gridExtra)
+sib <- ggplot(train, aes(SibSp)) + geom_bar(position = "dodge", aes(fill = factor(train$Survived)))
+parch <- ggplot(train, aes(Parch)) + geom_bar(position = "dodge", aes(fill = factor(train$Survived)))
+age <- ggplot(train, aes(Age)) + geom_histogram(bins = 40,position = "dodge", aes(fill = factor(train$Survived)))
+
+grid.arrange(sib, parch, age, ncol = 1)
+
+```
+Penalty for having no siblings and no parents
+
+create new features for 0 parents and 0 siblings
+
+```{r}
+all$factor_SibSP <- factor(as.numeric(all$SibSp == 0))
+all$factor_Parch <- factor(as.numeric(all$Parch == 0))
+all$factor_single <- factor(as.numeric(all$Parch == 0 & all$SibSp == 0))
+all$isbaby <- factor(as.numeric(all$Age < 5))
+all$istwenty <- factor(as.numeric(all$Age > 15 & all$Age < 30))
+summary(all)
+```
+Create new train and test with sibsp and parch and implment logistic model
+
+```{r}
+train_names <- c("factor_ Pclass", "factor_ Sex", "factor_SibSP", "factor_Parch")
+Xtrain <- all[1:891, train_names]
+Xtrain$Survived <- factor(train[,"Survived"])
+Xtest <- all[892:1309, train_names]
+
+Xtrain_train <- Xtrain[1:(dim(Xtrain)[1]/2),]
+Xtrain_test <- Xtrain[(dim(Xtrain)[1]/2 +1):(dim(Xtrain)[1]),]
+
+model1 <- glm(Survived ~ ., data = Xtrain_train, family = binomial)
+model_test1 <-factor(ifelse(predict(model1, newdata = Xtrain_test[train_names]) > 0.5,1,0))
+summary(model1)
+confusionMatrix(Xtrain_test$Survived, model_test1)
+
+compare <- data.frame(Model = model_test1, Actual = factor(Xtrain_test$Survived))
+```
+create submission for kaggle by running model on test data using the entire train set
+
+```{r}
+submission_test_data <- Xtest
+submission_test_model <- glm(Survived ~ ., data = Xtrain, family = binomial)
+submission_test_predict <-factor(ifelse(predict(submission_test_model, newdata = submission_test_data) > 0.5,1,0))
+
+submission_df <- data.frame("PassengerId" = all[892:1309, "PassengerId"], "Survived" = submission_test_predict)
+
+write.csv(submission_df[c("PassengerId", "Survived")], "Titanic_Submission.csv", row.names = FALSE)
+
+```
+
+This submission Recieved a 0.7511
